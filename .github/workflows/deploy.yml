@@ -1,0 +1,46 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main  # Roda apenas na branch main
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.REGION }}
+  SERVICE_NAME: my-python-app
+  REPO: my-repo  # Nome do repositório no Artifact Registry
+  IMAGE: my-python-app  # Nome da imagem
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v3
+
+    - name: Autenticar no Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Configurar o projeto no gcloud
+      run: gcloud config set project $GCP_PROJECT_ID
+
+    - name: Configurar autenticação no Artifact Registry
+      run: gcloud auth configure-docker $REGION-docker.pkg.dev
+
+    - name: Build e Push da imagem para o Artifact Registry
+      run: |
+        gcloud builds submit --tag $REGION-docker.pkg.dev/$GCP_PROJECT_ID/$REPO/$IMAGE .
+
+    - name: Fazer Deploy no Cloud Run
+      run: |
+        gcloud run deploy $SERVICE_NAME \
+          --image $REGION-docker.pkg.dev/$GCP_PROJECT_ID/$REPO/$IMAGE \
+          --region $REGION \
+          --platform managed \
+          --allow-unauthenticated \
+          --port 8080
